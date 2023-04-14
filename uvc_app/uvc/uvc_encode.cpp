@@ -62,6 +62,12 @@ extern void mjpeg_rga_osd_process(MpiEncTestData *p, int id, int src_fd);
 }
 #endif
 
+//hexmeet
+#define pixfmtstr(x)    (x) & 0xff, ((x) >> 8) & 0xff, ((x) >> 16) & 0xff, \
+            ((x) >> 24) & 0xff
+
+
+
 #if RK_MPP_RANGE_DEBUG_ON
 static char *strtrimr(char *pstr)
 {
@@ -102,7 +108,7 @@ static char *strrmlb(char *pstr)
 
 int uvc_encode_init(struct uvc_encode *e, int width, int height, int fcc, int h265, unsigned int fps)
 {
-    LOG_INFO("%s: width = %d, height = %d, fcc = %d, h265 = %d, fps = %d\n", __func__, width, height,fcc,h265,fps);
+    LOG_INFO("%s: width = %d, height = %d, fcc = %c%c%c%c, h265 = %d, fps = %d\n", __func__, width, height,pixfmtstr(fcc),h265,fps);
     memset(e, 0, sizeof(*e));
     e->video_id = -1;
     e->width = -1;
@@ -249,6 +255,7 @@ bool uvc_encode_process(struct uvc_encode *e, void *virt, struct MPP_ENC_INFO *i
     switch (fcc)
     {
     case V4L2_PIX_FMT_YUYV:
+    case V4L2_PIX_FMT_UYVY:
     case V4L2_PIX_FMT_NV12:
         if (virt) {
 #ifdef RK_MPP_USE_UVC_VIDEO_BUFFER

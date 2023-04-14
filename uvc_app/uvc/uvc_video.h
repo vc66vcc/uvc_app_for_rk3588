@@ -56,7 +56,8 @@ extern "C" {
 #define UVC_DYNAMIC_DEBUG_ISP_FPS_CHECK "/tmp/uvc_isp_fps"
 #define UVC_DYNAMIC_DEBUG_IPC_FPS_CHECK "/tmp/uvc_ipc_fps"
 
-#define UVC_SEND_BUF_WHEN_ENC_READY 1
+//#define UVC_SEND_BUF_WHEN_ENC_READY 1
+#define UVC_SEND_BUF_WHEN_ENC_READY 0           //hexmeet
 
 
 #if UVC_DYNAMIC_DEBUG_FPS

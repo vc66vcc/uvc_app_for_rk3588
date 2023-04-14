@@ -43,7 +43,7 @@
 #include <sys/prctl.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
-#include <drm/drm.h>
+#include <drm/drm.h>   	//hexmeet
 
 #include <list>
 #ifdef RK_MPP_USE_UVC_VIDEO_BUFFER
@@ -76,7 +76,7 @@ static pthread_mutex_t mtx_v = PTHREAD_MUTEX_INITIALIZER;
 static struct uvc_buffer *uvc_buffer_create(int width, int height, struct uvc_video *v)
 {
     struct uvc_buffer *buffer = NULL;
-
+    int y, uv;
     buffer = (struct uvc_buffer *)calloc(1, sizeof(struct uvc_buffer));
     if (!buffer)
         return NULL;
@@ -90,7 +90,9 @@ static struct uvc_buffer *uvc_buffer_create(int width, int height, struct uvc_vi
         v->drm_fd = drm_open();
     if (v->drm_fd < 0)
         return NULL;
-    if (v->uvc_user.fcc == V4L2_PIX_FMT_YUYV || v->uvc_user.fcc == V4L2_PIX_FMT_NV12)
+    if (v->uvc_user.fcc == V4L2_PIX_FMT_YUYV || \
+        v->uvc_user.fcc == V4L2_PIX_FMT_UYVY || \
+        v->uvc_user.fcc == V4L2_PIX_FMT_NV12)
         drm_flag = ROCKCHIP_BO_CACHABLE;
 
     int ret = drm_alloc(v->drm_fd, buffer->drm_buf_size, 16, &buffer->handle, drm_flag);
@@ -220,6 +222,8 @@ int uvc_gadget_pthread_create(struct uvc_function_config *fc)
     pthread_t *pid = NULL;
     int id = fc->video;
     uvc_memset_uvc_user(id);
+
+    LOG_DEBUG("uvc_video_get_uvc_pid id:%d!\n", id);
     if ((pid = uvc_video_get_uvc_pid(id)))
     {
         if (pthread_create(pid, NULL, uvc_gadget_pthread, fc))
@@ -267,7 +271,7 @@ int uvc_video_id_add(struct uvc_function_config *fc)
     int ret = 0;
     int id = fc->video;
 
-    LOG_INFO("add uvc video id: %d\n", id);
+    LOG_DEBUG("add uvc video id: %d\n", id);
 
     pthread_mutex_lock(&mtx_v);
     if (!_uvc_video_id_check(id))
@@ -278,6 +282,7 @@ int uvc_video_id_add(struct uvc_function_config *fc)
             v->id = id;
             lst_v.push_back(v);
             pthread_mutex_unlock(&mtx_v);
+            LOG_DEBUG("uvc_gadget_pthread_create dev_name:%s\n", fc->dev_name);
             uvc_gadget_pthread_create(fc);
             pthread_mutex_lock(&mtx_v);
             pthread_mutex_init(&v->buffer_mutex, NULL);
@@ -480,7 +485,7 @@ void uvc_video_join_uvc_pid(int id)
 static void uvc_gadget_pthread_exit(int id)
 {
     while (!uvc_get_user_run_state(id))
-        pthread_yield();
+        usleep(500);//pthread_yield();
     uvc_set_user_run_state(false, id);
     uvc_video_join_uvc_pid(id);
 }

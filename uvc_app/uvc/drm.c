@@ -127,7 +127,7 @@ void *drm_map_buffer(int fd, unsigned int handle, size_t len)
     buf = mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, dmmd.offset);
     if (buf == MAP_FAILED)
     {
-        LOG_ERROR("mmap failed: %s\n", strerror(errno));
+        LOG_ERROR("mmap failed: %s  len:%lu offset:%lu\n", strerror(errno), len, dmmd.offset);
         return NULL;
     }
 
@@ -155,7 +155,11 @@ int drm_handle_to_fd(int fd, unsigned int handle, int *map_fd, unsigned int flag
 
     ret = drm_ioctl(fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &dph);
     if (ret < 0)
+    {
+        LOG_ERROR("drm_ioctl DRM_IOCTL_PRIME_HANDLE_TO_FD failed ret:%d\n",ret);
         return ret;
+    }
+        
 
     *map_fd = dph.fd;
 

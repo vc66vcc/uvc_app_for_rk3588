@@ -125,7 +125,7 @@ enum XuCmd
 /* IO methods supported */
 enum io_method
 {
-    IO_METHOD_MMAP,
+    IO_METHOD_MMAP = 1,
     IO_METHOD_USERPTR,
     IO_METHOD_DMA_BUFF,
 };
@@ -134,10 +134,20 @@ enum io_method
 #define UVC_IO_METHOD_USERPTR 1
 #define UVC_IO_METHOD_DMA_BUFF 2
 
+#if 0
 #ifdef RK_MPP_USE_UVC_VIDEO_BUFFER
 #define UVC_IO_METHOD   UVC_IO_METHOD_DMA_BUFF // do not modify, modify the RK_MPP_USE_UVC_VIDEO_BUFFER to choice
 #else
 #define UVC_IO_METHOD   UVC_IO_METHOD_MMAP //UVC_IO_METHOD_DMA_BUFF // here can set 0 or 2 //  1 still not support
+#endif
+#endif
+
+#if 1
+#ifdef RK_MPP_USE_UVC_VIDEO_BUFFER
+#define UVC_IO_METHOD   UVC_IO_METHOD_USERPTR // do not modify, modify the RK_MPP_USE_UVC_VIDEO_BUFFER to choice
+#else
+#define UVC_IO_METHOD   UVC_IO_METHOD_MMAP //UVC_IO_METHOD_DMA_BUFF // here can set 0 or 2 //  1 still not support
+#endif
 #endif
 
 /* Buffer representing one video frame */

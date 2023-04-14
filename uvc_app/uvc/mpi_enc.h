@@ -31,6 +31,7 @@ extern "C" {
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 #include <rockchip/rk_mpi.h>
 
 //#include "mpp_env.h"
@@ -51,11 +52,12 @@ extern "C" {
 #define RK_MPP_H264_FORCE_IDR_COUNT 5
 #define RK_MPP_H264_FORCE_IDR_PERIOD 5 //must >=1
 #define RK_MPP_ENC_TEST_NATIVE 0
+//#define CAMERA_CONTROL 0            //hexmeet
 #define RK_MPP_USE_ZERO_COPY 1
 
 #if RK_MPP_USE_ZERO_COPY
 #if !RK_MPP_ENC_TEST_NATIVE
-#define RK_MPP_USE_UVC_VIDEO_BUFFER
+#define RK_MPP_USE_UVC_VIDEO_BUFFER       //hexmeet
 #endif
 extern struct uvc_encode uvc_enc;
 #endif

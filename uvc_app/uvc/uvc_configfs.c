@@ -228,10 +228,15 @@ static char *configfs_find_uvc_function(unsigned int index)
     int ret;
 
     format = "%s/usb_gadget/*/functions/%s";
-    ret = asprintf(&path, format, "/sys/kernel/config", target);
+    //ret = asprintf(&path, format, "/sys/kernel/config", target); hexmeet
+    ret = asprintf(&path, format, "/config", target);
     if (!ret)
+    {
+        printf("err.configfs_find_uvc_function path:%s\n",path);
         return NULL;
+    }
 
+    printf("debug.configfs_find_uvc_function path:%s index:%d\n",path,index);
     func_path = path_glob_index_match(path, index);
 
     free(path);
@@ -248,12 +253,21 @@ static int udc_find_video_device(const char *udc, const char *function)
     unsigned int i;
     int ret;
 
+    //ret = asprintf(&vpath,
+    //               "/sys/class/udc/%s/device/gadget/video4linux/video*",
+    //               udc ? udc : "*");
+
+    //hexmeet
     ret = asprintf(&vpath,
                    "/sys/class/udc/%s/device/gadget/video4linux/video*",
                    udc ? udc : "*");
     if (!ret)
+    {
+        printf("err.udc_find_video_device asprintf vpath:%s\n",vpath);
         return -1;
+    }
 
+    printf("%s:L%d trace!\n",__func__,__LINE__);
     glob(vpath, 0, NULL, &globbuf);
     free(vpath);
 
@@ -280,6 +294,8 @@ static int udc_find_video_device(const char *udc, const char *function)
             video_id = -1;
         free(video);
     }
+
+    printf("%s:L%d trace!\n",__func__,__LINE__);
 
     globfree(&globbuf);
 
@@ -678,17 +694,25 @@ struct uvc_function_config *configfs_parse_uvc_function(unsigned int index)
 
     /* Find the function in ConfigFS. */
     fpath = configfs_find_uvc_function(index);
-    if (!fpath) {
+    if (!fpath) 
+    {
+        printf("err.configfs_parse_uvc_function fpath is NULL\n");
         free(fc);
         return NULL;
     }
 
     function = basename(fpath);
 
+    printf("debug.configfs_parse_uvc_function fpath:%s function:%s\n", fpath, function);
+
     fc->dev_name = attribute_read_str(fpath, "device_name");
     if(fc->dev_name == NULL)
        fc->dev_name = "UVC CAMERA";
-    fc->udc = attribute_read_str(fpath, "../../UDC");
+
+    printf("debug.configfs_parse_uvc_function fc->dev_name:%s\n", fc->dev_name);
+
+    //fc->udc = attribute_read_str(fpath, "../../UDC");     //hexmeet
+    fc->udc = "fc000000.usb";                               //hexmeet
     fc->video = udc_find_video_device(fc->udc, function);
     printf("fc->dev_name:%s, fc->udc:%s, fc->video:%d \n",fc->dev_name,fc->udc,fc->video);
     if (fc->video < 0) {

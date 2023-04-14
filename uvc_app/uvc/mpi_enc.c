@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <pthread.h>			//hexmeet
 #include <sys/inotify.h>
 #include "mpi_enc.h"
 #include "uvc_video.h"
@@ -26,6 +27,37 @@
 #include <rga/im2d.h>
 #include <rga/rga.h>
 #endif
+
+//hexmeet
+#define pixfmtstr(x)    (x) & 0xff, ((x) >> 8) & 0xff, ((x) >> 16) & 0xff, \
+            ((x) >> 24) & 0xff
+
+
+#define SIG_CANCEL_SIGNAL SIGUSR1
+#define PTHREAD_CANCEL_ENABLE 1
+#define PTHREAD_CANCEL_DISABLE 0
+#define PTHREAD_CANCEL_ASYNCHRONOUS 1
+
+typedef long pthread_t;
+
+static int pthread_setcancelstate(int state, int *oldstate) {
+    sigset_t   new, old;
+    int ret;
+    sigemptyset (&new);
+    sigaddset (&new, SIG_CANCEL_SIGNAL);
+
+    ret = pthread_sigmask(state == PTHREAD_CANCEL_ENABLE ? SIG_BLOCK : SIG_UNBLOCK, &new , &old);
+    if(oldstate != NULL)
+    {
+        *oldstate =sigismember(&old,SIG_CANCEL_SIGNAL) == 0 ? PTHREAD_CANCEL_DISABLE : PTHREAD_CANCEL_ENABLE;
+    }
+    return ret;
+}
+
+static inline int pthread_cancel(pthread_t thread) {
+    return pthread_kill(thread, SIG_CANCEL_SIGNAL);
+}
+
 
 #define TEST_MPP_SEI 0
 
@@ -1119,7 +1151,8 @@ static MPP_RET test_mpp_run(MpiEncTestData *p, MPP_ENC_INFO_DEF *info)
             clock_gettime(CLOCK_MONOTONIC, &now_tm);
             last_time_us = now_time_us;
             now_time_us = now_tm.tv_sec * 1000000LL + now_tm.tv_nsec / 1000; // us
-            use_time_us = now_time_us - uvc_buf->pts;
+            //use_time_us = now_time_us - uvc_buf->pts; //hexmeet
+            
 
             p->common_cfg.enc_time = (now_time_us - last_time_us) / 1000 +
                                      (p->common_cfg.try_count - try_count) * MPP_FRC_WAIT_TIME_MS;
@@ -1543,8 +1576,9 @@ void mpi_enc_cmd_config(MpiEncTestCmd *cmd, int width, int height, int fcc, int 
     switch (fcc)
     {
     case V4L2_PIX_FMT_YUYV:
+    case V4L2_PIX_FMT_UYVY:
     case V4L2_PIX_FMT_NV12:
-        LOG_DEBUG("%s: yuyv not need mpp encodec: %d\n", __func__, fcc);
+        LOG_DEBUG("%s: yuyv not need mpp encodec: %c%c%c%c\n", __func__, pixfmtstr(fcc));
         break;
     case V4L2_PIX_FMT_MJPEG:
         cmd->type = MPP_VIDEO_CodingMJPEG;
@@ -3558,7 +3592,7 @@ void *thread_check_mpp_enc_chenge_loop(void *user)
     int ret = 0;
     MPP_RET mpp_ret;
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, PTHREAD_CREATE_JOINABLE);
-    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+    //pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);		//hexmeet
     MpiEncTestData *p = (MpiEncTestData *)user;
     int last_wd = 0;
     unsigned char buf[1024] = {0};

@@ -1,0 +1,8 @@
+/home/build/studio/hexmeet/sv800_project/rk3588uvc/uvc_app/build/android/arm/CMakeFiles/install/strip.dir
+/home/build/studio/hexmeet/sv800_project/rk3588uvc/uvc_app/build/android/arm/CMakeFiles/install/local.dir
+/home/build/studio/hexmeet/sv800_project/rk3588uvc/uvc_app/build/android/arm/CMakeFiles/uvc_app.dir
+/home/build/studio/hexmeet/sv800_project/rk3588uvc/uvc_app/build/android/arm/CMakeFiles/list_install_components.dir
+/home/build/studio/hexmeet/sv800_project/rk3588uvc/uvc_app/build/android/arm/CMakeFiles/rkuvc.dir
+/home/build/studio/hexmeet/sv800_project/rk3588uvc/uvc_app/build/android/arm/CMakeFiles/rebuild_cache.dir
+/home/build/studio/hexmeet/sv800_project/rk3588uvc/uvc_app/build/android/arm/CMakeFiles/edit_cache.dir
+/home/build/studio/hexmeet/sv800_project/rk3588uvc/uvc_app/build/android/arm/CMakeFiles/install.dir

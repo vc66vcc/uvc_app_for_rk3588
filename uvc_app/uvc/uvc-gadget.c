@@ -64,7 +64,7 @@ extern void camera_control_set_eptz(int val);
 extern void camera_control_set_zoom(int val);
 
 /* Enable debug prints. */
-//#define ENABLE_BUFFER_DEBUG
+//#define ENABLE_BUFFER_DEBUG     //hexmeet
 #define ENABLE_USB_REQUEST_DEBUG
 
 #define CLEAR(x)    memset (&(x), 0, sizeof (x))
@@ -217,6 +217,19 @@ struct v4l2_device
     struct uvc_device *udev;
 };
 
+
+#define V4L2_UVC_WIDTH  1920    //1920  1280
+#define V4L2_UVC_HEIGHT 1080     //1080  720
+
+
+//V4L2_BUF_TYPE_VIDEO_CAPTURE or V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE
+static enum v4l2_buf_type buf_type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+#define FMT_NUM_PLANES 1
+
+struct v4l2_plane planes_array[UVC_BUFFER_NUM][FMT_NUM_PLANES];
+
+
+
 void update_camera_ip(struct uvc_device *dev)
 {
     char cmd[32] = {0};
@@ -247,6 +260,16 @@ void update_camera_ip(struct uvc_device *dev)
     }
 }
 
+
+void file_write(char * filename, char * buff, int len)
+{
+    FILE *fp = NULL;
+    fp = fopen(filename, "a+");
+    fwrite(buff, len, 1, fp);
+    fclose(fp);
+}
+
+
 /* ---------------------------------------------------------------------------
  * V4L2 streaming related
  */
@@ -256,6 +279,8 @@ v4l2_uninit_device(struct v4l2_device *dev)
 {
     unsigned int i;
     int ret;
+
+    LOG_INFO("---V4L2: munmap io_method:%d\n", dev->io);
 
     switch (dev->io)
     {
@@ -285,13 +310,16 @@ static int
 v4l2_reqbufs_mmap(struct v4l2_device *dev, int nbufs)
 {
     struct v4l2_requestbuffers req;
+    //struct v4l2_plane planes[FMT_NUM_PLANES];
     unsigned int i = 0;
     int ret;
 
+    LOG_INFO("---V4L2: v4l2_reqbufs_mmap\n");
     CLEAR(req);
 
     req.count = nbufs;
-    req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    //req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    req.type = buf_type;
     req.memory = V4L2_MEMORY_MMAP;
 
     ret = ioctl(dev->v4l2_fd, VIDIOC_REQBUFS, &req);
@@ -328,9 +356,16 @@ v4l2_reqbufs_mmap(struct v4l2_device *dev, int nbufs)
     {
         memset(&dev->mem[i].buf, 0, sizeof(dev->mem[i].buf));
 
-        dev->mem[i].buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        dev->mem[i].buf.type = buf_type;//V4L2_BUF_TYPE_VIDEO_CAPTURE;
         dev->mem[i].buf.memory = V4L2_MEMORY_MMAP;
         dev->mem[i].buf.index = i;
+
+        if(V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE == dev->mem[i].buf.type)
+        {
+            //dev->mem[i].buf.m.planes = planes;
+            dev->mem[i].buf.m.planes = planes_array[i];
+            dev->mem[i].buf.length = FMT_NUM_PLANES;
+        }
 
         ret = ioctl(dev->v4l2_fd, VIDIOC_QUERYBUF, &(dev->mem[i].buf));
         if (ret < 0)
@@ -341,11 +376,27 @@ v4l2_reqbufs_mmap(struct v4l2_device *dev, int nbufs)
             goto err_free;
         }
 
-        dev->mem[i].start = mmap(NULL /* start anywhere */,
+        if(V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE ==  dev->mem[i].buf.type)
+        {
+            LOG_DEBUG("V4L2: VIDIOC_QUERYBUF length:%d,offset:%d\n",\
+                dev->mem[i].buf.m.planes[0].length,\
+                dev->mem[i].buf.m.planes[0].m.mem_offset);
+            dev->mem[i].length = dev->mem[i].buf.m.planes[0].length;
+            dev->mem[i].start = mmap(NULL /* start anywhere */,
+                                dev->mem[i].buf.m.planes[0].length,
+                                PROT_READ | PROT_WRITE /* required */,
+                                MAP_SHARED /* recommended */,
+                                dev->v4l2_fd, dev->mem[i].buf.m.planes[0].m.mem_offset);;
+        }
+        else
+        {
+            dev->mem[i].length = dev->mem[i].buf.length;
+            dev->mem[i].start = mmap(NULL /* start anywhere */,
                                  dev->mem[i].buf.length,
                                  PROT_READ | PROT_WRITE /* required */,
                                  MAP_SHARED /* recommended */,
                                  dev->v4l2_fd, dev->mem[i].buf.m.offset);
+        }
 
         if (MAP_FAILED == dev->mem[i].start)
         {
@@ -356,7 +407,7 @@ v4l2_reqbufs_mmap(struct v4l2_device *dev, int nbufs)
             goto err_free;
         }
 
-        dev->mem[i].length = dev->mem[i].buf.length;
+        //dev->mem[i].length = dev->mem[i].buf.length;
         LOG_DEBUG("V4L2: Buffer %u mapped at address %p.\n", i,
                  dev->mem[i].start);
     }
@@ -378,10 +429,11 @@ v4l2_reqbufs_userptr(struct v4l2_device *dev, int nbufs)
     struct v4l2_requestbuffers req;
     int ret;
 
+    LOG_INFO("---V4L2: v4l2_reqbufs_userptr\n");
     CLEAR(req);
 
     req.count = nbufs;
-    req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    req.type = buf_type;//V4L2_BUF_TYPE_VIDEO_CAPTURE;
     req.memory = V4L2_MEMORY_USERPTR;
 
     ret = ioctl(dev->v4l2_fd, VIDIOC_REQBUFS, &req);
@@ -405,6 +457,8 @@ static int
 v4l2_reqbufs(struct v4l2_device *dev, int nbufs)
 {
     int ret = 0;
+
+    LOG_INFO("---V4L2: v4l2_reqbufs\n");
 
     switch (dev->io)
     {
@@ -431,13 +485,24 @@ v4l2_qbuf_mmap(struct v4l2_device *dev)
     unsigned int i;
     int ret;
 
+    LOG_INFO("---V4L2: v4l2_qbuf_mmap\n");
+
     for (i = 0; i < dev->nbufs; ++i)
     {
         memset(&dev->mem[i].buf, 0, sizeof(dev->mem[i].buf));
 
-        dev->mem[i].buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        dev->mem[i].buf.type = buf_type;//V4L2_BUF_TYPE_VIDEO_CAPTURE;
         dev->mem[i].buf.memory = V4L2_MEMORY_MMAP;
         dev->mem[i].buf.index = i;
+
+        if (V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE == dev->mem[i].buf.type) 
+        {
+            //struct v4l2_plane planes[FMT_NUM_PLANES];
+            //dev->mem[i].buf.m.planes = planes;
+            dev->mem[i].buf.m.planes = planes_array[dev->mem[i].buf.index];
+            dev->mem[i].buf.m.planes->length = dev->mem[i].length;
+            dev->mem[i].buf.length = FMT_NUM_PLANES;
+        }
 
         ret = ioctl(dev->v4l2_fd, VIDIOC_QBUF, &(dev->mem[i].buf));
         if (ret < 0)
@@ -457,6 +522,8 @@ static int
 v4l2_qbuf(struct v4l2_device *dev)
 {
     int ret = 0;
+
+    LOG_INFO("---V4L2: v4l2_qbuf\n");
 
     switch (dev->io)
     {
@@ -481,21 +548,35 @@ static int
 v4l2_process_data(struct v4l2_device *dev)
 {
     int ret;
+    unsigned int i = 0,*data_p,data;
     struct v4l2_buffer vbuf;
     struct v4l2_buffer ubuf;
+    int y = 0,uv = 0;
+    char * buff = NULL;
+
+    //LOG_INFO("---V4L2: v4l2_process_data\n");
 
     /* Return immediately if V4l2 streaming has not yet started. */
     if (!dev->is_streaming)
         return 0;
 
     if (dev->udev->first_buffer_queued)
+    {
         if (dev->dqbuf_count >= dev->qbuf_count)
+        {
+            LOG_INFO("v4l2_process_data dev->dqbuf_count:%d >= dev->qbuf_count:%d\n", dev->dqbuf_count, dev->qbuf_count);
             return 0;
+        }
+    }
+        
 
     /* Dequeue spent buffer rom V4L2 domain. */
     CLEAR(vbuf);
 
-    vbuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    //vbuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;    //hexmeet
+    vbuf.type = buf_type;
+    
+    
     switch (dev->io)
     {
     case IO_METHOD_USERPTR:
@@ -508,9 +589,19 @@ v4l2_process_data(struct v4l2_device *dev)
         break;
     }
 
+    if (V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE ==  vbuf.type) {
+        //struct v4l2_plane planes[FMT_NUM_PLANES];
+        //vbuf.m.planes = planes;
+        vbuf.m.planes = planes_array[vbuf.index];
+        vbuf.length = FMT_NUM_PLANES;
+    }
+
     ret = ioctl(dev->v4l2_fd, VIDIOC_DQBUF, &vbuf);
     if (ret < 0)
+    {
+        LOG_ERROR("err.v4l2_process_data dev->v4l2_fd VIDIOC_DQBUF ret:%x\n", ret);
         return ret;
+    }
 
     dev->dqbuf_count++;
 
@@ -535,11 +626,42 @@ v4l2_process_data(struct v4l2_device *dev)
     default:
         ubuf.memory = V4L2_MEMORY_USERPTR;
         ubuf.m.userptr = (unsigned long) dev->mem[vbuf.index].start;
-        ubuf.length = dev->mem[vbuf.index].length;
+        //ubuf.length = dev->mem[vbuf.index].length;
         ubuf.index = vbuf.index;
-        ubuf.bytesused = vbuf.bytesused;
+        //ubuf.bytesused = vbuf.bytesused;
+        if (V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE == vbuf.type)
+        {
+            ubuf.length = vbuf.m.planes[0].length;
+            ubuf.bytesused = vbuf.m.planes[0].bytesused;
+        }
+        else
+        {
+            ubuf.length = vbuf.length;
+            ubuf.bytesused = vbuf.bytesused;
+        }
+
         break;
     }
+
+#if 1
+    if(V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE == vbuf.type)
+    {
+        LOG_DEBUG("v4l2->ubuf:u/vbuf.index:%d ubuf.length:%d ubuf.bytesused:%d\n", \
+            vbuf.index, ubuf.length, ubuf.bytesused);
+    }
+
+    data_p = (unsigned int*)ubuf.m.userptr;
+    for(i= 0;i < ubuf.length / 4; i++)
+    {
+        //U0Y0V1Y1 -> 0xY1V1Y0U0  change to Y0U0Y1V1 -> 0xV1Y1U0Y0
+        *(data_p+i) = ((*(data_p+i) & 0xff00ff00)>>8) + ((*(data_p+i) & 0x00ff00ff)<<8);
+    }
+#endif
+
+#if 0
+        buff = (char *)ubuf.m.userptr;
+        file_write("/data/yueyc/v4l2.yuv", buff, ubuf.length);
+#endif
 
     ret = ioctl(dev->udev->uvc_fd, VIDIOC_QBUF, &ubuf);
     if (ret < 0)
@@ -586,8 +708,10 @@ v4l2_get_format(struct v4l2_device *dev)
     struct v4l2_format fmt;
     int ret;
 
+    LOG_INFO("---V4L2: v4l2_get_format\n");
+
     CLEAR(fmt);
-    fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    fmt.type = buf_type;
 
     ret = ioctl(dev->v4l2_fd, VIDIOC_G_FMT, &fmt);
     if (ret < 0)
@@ -609,6 +733,14 @@ v4l2_set_format(struct v4l2_device *dev, struct v4l2_format *fmt)
 {
     int ret;
 
+    LOG_INFO("---V4L2: v4l2_set_format\n");
+
+    fmt->fmt.pix.pixelformat = V4L2_PIX_FMT_UYVY;
+
+    LOG_DEBUG("V4L2: prepear to Setting format to: %c%c%c%c %ux%u num_planes:%d\n",
+                 pixfmtstr(fmt->fmt.pix.pixelformat),
+                 fmt->fmt.pix.width, fmt->fmt.pix.height, fmt->fmt.pix_mp.num_planes);
+
     ret = ioctl(dev->v4l2_fd, VIDIOC_S_FMT, fmt);
     if (ret < 0)
     {
@@ -617,9 +749,10 @@ v4l2_set_format(struct v4l2_device *dev, struct v4l2_format *fmt)
         return ret;
     }
 
-    LOG_DEBUG("V4L2: Setting format to: %c%c%c%c %ux%u\n",
+    fmt->fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
+    LOG_DEBUG("V4L2: Setting format to: %c%c%c%c %ux%u num_planes:%d\n",
              pixfmtstr(fmt->fmt.pix.pixelformat),
-             fmt->fmt.pix.width, fmt->fmt.pix.height);
+             fmt->fmt.pix.width, fmt->fmt.pix.height, fmt->fmt.pix_mp.num_planes);
 
     return 0;
 }
@@ -630,6 +763,8 @@ v4l2_set_ctrl(struct v4l2_device *dev, int new_val, int ctrl)
     struct v4l2_queryctrl queryctrl;
     struct v4l2_control control;
     int ret;
+
+    LOG_INFO("---V4L2: v4l2_set_ctrl\n");
 
     CLEAR(queryctrl);
 
@@ -686,8 +821,10 @@ v4l2_set_ctrl(struct v4l2_device *dev, int new_val, int ctrl)
 static int
 v4l2_start_capturing(struct v4l2_device *dev)
 {
-    int type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    int type = buf_type;//V4L2_BUF_TYPE_VIDEO_CAPTURE;
     int ret;
+
+    LOG_INFO("---V4L2: v4l2_start_capturing\n");
 
     ret = ioctl(dev->v4l2_fd, VIDIOC_STREAMON, &type);
     if (ret < 0)
@@ -708,10 +845,12 @@ v4l2_stop_capturing(struct v4l2_device *dev)
     enum v4l2_buf_type type;
     int ret;
 
+    LOG_INFO("---V4L2: v4l2_stop_capturing\n");
+
     switch (dev->io)
     {
     case IO_METHOD_MMAP:
-        type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        type = buf_type;//V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
         ret = ioctl(dev->v4l2_fd, VIDIOC_STREAMOFF, &type);
         if (ret < 0)
@@ -738,6 +877,8 @@ v4l2_open(struct v4l2_device **v4l2, char *devname, struct v4l2_format *s_fmt)
     int fd;
     int ret = -EINVAL;
 
+    LOG_INFO("---V4L2: v4l2_open\n");
+
     fd = open(devname, O_RDWR | O_NONBLOCK, 0);
     if (fd == -1)
     {
@@ -754,8 +895,10 @@ v4l2_open(struct v4l2_device **v4l2, char *devname, struct v4l2_format *s_fmt)
         goto err;
     }
 
-    if (!(cap.capabilities & V4L2_CAP_VIDEO_CAPTURE))
+    if (!(cap.capabilities & V4L2_CAP_VIDEO_CAPTURE) && \
+            !(cap.capabilities & V4L2_CAP_VIDEO_CAPTURE_MPLANE))
     {
+        
         LOG_ERROR("V4L2: %s is no video capture device\n", devname);
         goto err;
     }
@@ -766,6 +909,11 @@ v4l2_open(struct v4l2_device **v4l2, char *devname, struct v4l2_format *s_fmt)
                  devname);
         goto err;
     }
+
+    if (cap.capabilities & V4L2_CAP_VIDEO_CAPTURE)
+        buf_type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    else if (cap.capabilities & V4L2_CAP_VIDEO_CAPTURE_MPLANE)
+        buf_type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 
     dev = calloc(1, sizeof * dev);
     if (dev == NULL)
@@ -813,6 +961,8 @@ err:
 static void
 v4l2_close(struct v4l2_device *dev)
 {
+    LOG_INFO("---V4L2: v4l2_close\n");
+
     close(dev->v4l2_fd);
     free(dev);
 }
@@ -1201,7 +1351,7 @@ REDQBUF:
                         goto REDQBUF;
                         //return 0;
                     }
-                    for (int i = 0; i < dev->nbufs; i++)
+                    for (i = 0; i < dev->nbufs; i++)		//hexmeet
                     {
                         if (uvc_buf == dev->vbuf_info[i].uvc_buf)
                         {
@@ -1295,9 +1445,17 @@ REDQBUF:
         /* Queue the buffer to V4L2 domain */
         CLEAR(vbuf);
 
-        vbuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+
+        vbuf.type = buf_type;     //V4L2_BUF_TYPE_VIDEO_CAPTURE;
         vbuf.memory = V4L2_MEMORY_MMAP;
         vbuf.index = dev->ubuf.index;
+
+        if (V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE == vbuf.type) {
+            //struct v4l2_plane planes[FMT_NUM_PLANES];
+            //vbuf.m.planes = planes;
+            vbuf.m.planes = planes_array[vbuf.index];
+            vbuf.length = FMT_NUM_PLANES;
+        }
 
         ret = ioctl(dev->vdev->v4l2_fd, VIDIOC_QBUF, &vbuf);
         if (ret < 0)
@@ -1461,6 +1619,8 @@ uvc_video_reqbufs_mmap(struct uvc_device *dev, int nbufs)
     unsigned int i;
     int ret;
 
+    LOG_INFO("---uvc: uvc_video_reqbufs_mmap\n");
+
     CLEAR(rb);
 
     rb.count = nbufs;
@@ -1552,6 +1712,8 @@ uvc_video_reqbufs_dmabuff(struct uvc_device *dev, int nbufs)
     unsigned int i, j, bpl = 0, payload_size;
     int ret;
 
+    LOG_INFO("---uvc: uvc_video_reqbufs_dmabuff\n");
+
     CLEAR(rb);
 
     rb.count = nbufs;
@@ -1582,6 +1744,8 @@ uvc_video_reqbufs_userptr(struct uvc_device *dev, int nbufs)
     struct v4l2_requestbuffers rb;
     unsigned int i, j, bpl = 0, payload_size;
     int ret;
+
+    LOG_INFO("---uvc: uvc_video_reqbufs_userptr\n");
 
     CLEAR(rb);
 
@@ -1620,6 +1784,7 @@ uvc_video_reqbufs_userptr(struct uvc_device *dev, int nbufs)
         switch (dev->fcc)
         {
         case V4L2_PIX_FMT_YUYV:
+        case V4L2_PIX_FMT_UYVY:
         case V4L2_PIX_FMT_NV12:
             bpl = dev->width * 2;
             payload_size = dev->width * dev->height * 2;
@@ -1649,6 +1814,12 @@ uvc_video_reqbufs_userptr(struct uvc_device *dev, int nbufs)
                     memset(dev->dummy_buf[i].start + j * bpl,
                            dev->color++, bpl);
 
+            /* Hexmeet */
+            if (V4L2_PIX_FMT_UYVY == dev->fcc)
+                for (j = 0; j < dev->height; ++j)
+                    memset(dev->dummy_buf[i].start + j * bpl,
+                           dev->color++, bpl);
+
             if (V4L2_PIX_FMT_MJPEG == dev->fcc)
                 memcpy(dev->dummy_buf[i].start, dev->imgdata,
                        dev->imgsize);
@@ -1665,6 +1836,8 @@ err:
 int uvc_video_reqbufs(struct uvc_device *dev, int nbufs)
 {
     int ret = 0;
+
+    LOG_INFO("---uvc: uvc_video_reqbufs\n");
 
     switch (dev->io)
     {
@@ -1703,7 +1876,10 @@ uvc_handle_streamon_event(struct uvc_device *dev)
 #if !UVC_SEND_BUF_WHEN_ENC_READY
     ret = uvc_video_reqbufs(dev, dev->nbufs);
     if (ret < 0)
+    {
+        LOG_ERROR("UVC: err.uvc_handle_streamon_event uvc_video_reqbufs ret:%d\n",ret);
         goto err;
+    }
 #endif
     if (!dev->run_standalone)
     {
@@ -1716,17 +1892,25 @@ uvc_handle_streamon_event(struct uvc_device *dev)
              */
             ret = v4l2_reqbufs(dev->vdev, dev->vdev->nbufs);
             if (ret < 0)
+            {
+                LOG_ERROR("UVC: err.uvc_handle_streamon_event v4l2_reqbufs ret:%d\n",ret);
                 goto err;
+            }
         }
         ret = v4l2_qbuf(dev->vdev);
         if (ret < 0)
+        {
+            LOG_ERROR("UVC: err.uvc_handle_streamon_event v4l2_qbuf ret:%d\n",ret);
             goto err;
-
+        }
 
         /* Start V4L2 capturing now. */
         ret = v4l2_start_capturing(dev->vdev);
         if (ret < 0)
+        {
+            LOG_ERROR("UVC: err.uvc_handle_streamon_event v4l2_start_capturing ret:%d\n",ret);
             goto err;
+        }
 
         dev->vdev->is_streaming = 1;
     }
@@ -1805,6 +1989,7 @@ uvc_fill_streaming_control(struct uvc_device *dev,
     switch (format->fcc)
     {
     case V4L2_PIX_FMT_YUYV:
+    case V4L2_PIX_FMT_UYVY:
     case V4L2_PIX_FMT_NV12:
         ctrl->dwMaxVideoFrameSize = frame->width * frame->height * 2;
         break;
@@ -1815,8 +2000,8 @@ uvc_fill_streaming_control(struct uvc_device *dev,
         ctrl->dwMaxVideoFrameSize = dev->imgsize;
         break;
     }
-    LOG_INFO("dev->fcc:%d,dev->width:%d,dev->height:%d,dev->imgsize:%d,ctrl->dwFrameInterval:%d\n",
-              dev->fcc,dev->width, dev->height, dev->imgsize, ctrl->dwFrameInterval);
+    LOG_INFO("dev->fcc:%c%c%c%c,dev->width:%d,dev->height:%d,dev->imgsize:%d,ctrl->dwFrameInterval:%d\n",
+              pixfmtstr(dev->fcc),dev->width, dev->height, dev->imgsize, ctrl->dwFrameInterval);
 
     /* TODO: the UVC maxpayload transfer size should be filled
      * by the driver.
@@ -4027,6 +4212,7 @@ void uvc_enc_format_to_ipc_enc_type(unsigned int fcc, struct CAMERA_INFO *camera
 {
     switch (fcc) {
         case V4L2_PIX_FMT_YUYV:
+        case V4L2_PIX_FMT_UYVY:
         case V4L2_PIX_FMT_NV12:
             camera_info->encode_type = UVC_IPC_ENC_YUV;
             break;
@@ -4178,7 +4364,7 @@ uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
          */
         CLEAR(fmt);
 
-        fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        fmt.type = buf_type;//V4L2_BUF_TYPE_VIDEO_CAPTURE; //hexmeet
         fmt.fmt.pix.field = V4L2_FIELD_ANY;
         fmt.fmt.pix.width = dev->width;
         fmt.fmt.pix.height = dev->height;
@@ -4187,6 +4373,7 @@ uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
         switch (dev->fcc)
         {
         case V4L2_PIX_FMT_YUYV:
+        case V4L2_PIX_FMT_UYVY:
         case V4L2_PIX_FMT_NV12:
             fmt.fmt.pix.sizeimage = (fmt.fmt.pix.width * fmt.fmt.pix.height * 2);
             break;
@@ -4214,6 +4401,8 @@ uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
         if (!dev->run_standalone)
         {
             /* UVC - V4L2 integrated path. */
+            //v4l2_get_format(dev->vdev);
+            //ret = ioctl(dev->vdev->v4l2_fd, VIDIOC_G_FMT, &fmt);
             ret = v4l2_set_format(dev->vdev, &fmt);
             if (ret < 0)
                 goto err;
@@ -4368,6 +4557,7 @@ uvc_events_init(struct uvc_device *dev)
     switch (dev->fcc)
     {
     case V4L2_PIX_FMT_YUYV:
+    case V4L2_PIX_FMT_UYVY:
     case V4L2_PIX_FMT_NV12:
         payload_size = dev->width * dev->height * 2;
         break;
@@ -4480,15 +4670,16 @@ uvc_gadget_main(struct uvc_function_config *fc)
     struct timeval tv;
     struct v4l2_format fmt;
     char uvc_devname[32] = {0};
-    char *v4l2_devname = "/dev/video0";
+    char *v4l2_devname = "/dev/video11";  //rkisp_mainpath:/dev/video11
     char *mjpeg_image = NULL;
     fd_set fdsv, fdsu;
     int ret, nfds;
     int bulk_mode = 0;
-    int dummy_data_gen_mode = 1;
+    //int dummy_data_gen_mode = 1;
+    int dummy_data_gen_mode = 0;    //hexmeet       是否使用模拟的彩条数据
     /* Frame format/resolution related params. */
-    int default_format = 1;
-    int default_resolution = 1;
+    int default_format = 0;
+    int default_resolution = 1;         //hexmeet
     int nbufs = UVC_BUFFER_NUM;
     /* USB speed related params */
     int mult = 0;
@@ -4501,6 +4692,9 @@ uvc_gadget_main(struct uvc_function_config *fc)
 #else
     enum io_method uvc_io_method = IO_METHOD_DMA_BUFF;
 #endif
+
+    LOG_DEBUG("uvc_open io_method:%d\n",uvc_io_method);
+
     int id = fc->video;
     snprintf(uvc_devname, sizeof(uvc_devname), "/dev/video%d", id);
     /************************************************************************************
@@ -4615,9 +4809,11 @@ uvc_gadget_main(struct uvc_function_config *fc)
          * device as requested by the user.
          */
         CLEAR(fmt);
-        fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        fmt.fmt.pix.width = (default_resolution == 0) ? 640 : 1280;
-        fmt.fmt.pix.height = (default_resolution == 0) ? 480 : 720;
+        fmt.type = buf_type;//V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        //fmt.fmt.pix.width = (default_resolution == 0) ? 640 : 1280;
+        //fmt.fmt.pix.height = (default_resolution == 0) ? 480 : 720;
+        fmt.fmt.pix.width = (default_resolution == 0) ? 640 : V4L2_UVC_WIDTH;
+        fmt.fmt.pix.height = (default_resolution == 0) ? 480 : V4L2_UVC_HEIGHT;
         fmt.fmt.pix.sizeimage = (default_format == 0) ?
                                 (fmt.fmt.pix.width * fmt.fmt.pix.height * 2) :
                                 (fmt.fmt.pix.width * fmt.fmt.pix.height * 1.5);
@@ -4638,6 +4834,7 @@ uvc_gadget_main(struct uvc_function_config *fc)
         case 0:
         default:
             fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
+            //fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_UYVY;
             break;
         }
         fmt.fmt.pix.field = V4L2_FIELD_ANY;
@@ -4646,9 +4843,12 @@ uvc_gadget_main(struct uvc_function_config *fc)
         ret = v4l2_open(&vdev, v4l2_devname, &fmt);
         if (vdev == NULL || ret < 0)
             return 1;
+
+        LOG_DEBUG("v4l2_open v4l2_devname:%s success\n", v4l2_devname);
     }
 
     /* Open the UVC device. */
+    LOG_DEBUG("uvc_open uvc_devname:%s\n", uvc_devname);
     ret = uvc_open(&udev, uvc_devname);
     if (udev == NULL || ret < 0)
         return 1;
@@ -4659,15 +4859,21 @@ uvc_gadget_main(struct uvc_function_config *fc)
 
     if (!dummy_data_gen_mode && !mjpeg_image)
     {
+        LOG_DEBUG("uvc_open stream:%s -> %s\n", v4l2_devname, uvc_devname);
+    }
+
+    if (!dummy_data_gen_mode && !mjpeg_image)
+    {
         vdev->v4l2_devname = v4l2_devname;
         /* Bind UVC and V4L2 devices. */
         udev->vdev = vdev;
         vdev->udev = udev;
+        LOG_DEBUG("uvc_open vdev:%s bind to udev:%s\n", v4l2_devname, uvc_devname);
     }
 
     /* Set parameters as passed by user. */
-    udev->width = (default_resolution == 0) ? 640 : 1280;
-    udev->height = (default_resolution == 0) ? 480 : 720;
+    udev->width = (default_resolution == 0) ? 640 : V4L2_UVC_WIDTH;
+    udev->height = (default_resolution == 0) ? 480 : V4L2_UVC_HEIGHT;
     udev->imgsize = (default_format == 0) ?
                     (udev->width * udev->height * 2) :
                     (udev->width * udev->height * 2/*1.5*/);
@@ -4688,6 +4894,7 @@ uvc_gadget_main(struct uvc_function_config *fc)
     case 0:
     default:
         udev->fcc = V4L2_PIX_FMT_YUYV;
+        //udev->fcc = V4L2_PIX_FMT_UYVY;
         break;
     }
     uvc_set_user_fcc(udev->fcc, udev->video_id);
@@ -4756,6 +4963,7 @@ uvc_gadget_main(struct uvc_function_config *fc)
             udev->maxpkt = 1024;
         break;
     }
+
     if (!dummy_data_gen_mode && !mjpeg_image //&&
        )  //(IO_METHOD_MMAP == vdev->io)
     {

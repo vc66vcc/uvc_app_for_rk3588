@@ -19,6 +19,7 @@ enum {
   LOG_DEBUG
 };
 
+
 #define LOG_TAG "uvc_app"
 #define UVC_LOG_DYNAMIC_DEBUG "/tmp/uvc_log_debug"
 
@@ -47,7 +48,7 @@ int main(int argc, char *argv[])
     int media_set = 0;
 
     enable_minilog = 0;
-    uvc_app_log_level = LOG_INFO;
+    uvc_app_log_level = LOG_DEBUG;
     app_quit = 0;
 
 #if USE_RK_AISERVER
@@ -71,7 +72,7 @@ int main(int argc, char *argv[])
    char *log_level = getenv("uvc_app_log_level");
    if (log_level)
    {
-       LOG_INFO("uvc_app_log_level=%d", atoi(log_level));
+       LOG_INFO("uvc_app_log_level=%d\n", atoi(log_level));
        uvc_app_log_level = atoi(log_level);
    }
 
@@ -129,7 +130,7 @@ int main(int argc, char *argv[])
     ret = drm_alloc(fd, size, 16, &handle, 0);
     if (ret)
         return -1;
-    LOG_DEBUG("size:%d", size);
+    LOG_DEBUG("drm_alloc size:%d sucess\n", size);
     ret = drm_handle_to_fd(fd, handle, &handle_fd, 0);
     if (ret)
         return -1;
@@ -162,7 +163,8 @@ int main(int argc, char *argv[])
 
     flags = UVC_CONTROL_LOOP_ONCE;
 #if RK_MPP_ENC_TEST_NATIVE
-    uvc_encode_init(&uvc_enc, width, height, TEST_ENC_TPYE);
+    //uvc_encode_init(&uvc_enc, width, height, TEST_ENC_TPYE);
+    uvc_encode_init(&uvc_enc, width, height, TEST_ENC_TPYE, 0, 30);
 #else
     uvc_control_run(flags);
 #endif

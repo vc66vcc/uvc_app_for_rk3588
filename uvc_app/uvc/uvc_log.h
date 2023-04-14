@@ -22,6 +22,8 @@ extern int uvc_app_log_level;
 #define LOG_LEVEL_WARN 1
 #define LOG_LEVEL_INFO 2
 #define LOG_LEVEL_DEBUG 3
+#define LOG_LEVEL_ALL 4
+
 
 #ifndef LOG_TAG
 #define LOG_TAG "uvc_app"
@@ -36,7 +38,7 @@ extern int uvc_app_log_level;
     if (enable_minilog)                                                        \
       minilog_info("[%s][%s]:" format, LOG_TAG, __FUNCTION__, ##__VA_ARGS__);  \
     else                                                                       \
-      fprintf(stderr, "[%s][%s]:" format, LOG_TAG, __FUNCTION__,               \
+      fprintf(stderr, "[%s][%s][%s:%d]::" format, LOG_TAG, __FUNCTION__, __FILE__, __LINE__,\
               ##__VA_ARGS__);                                                  \
   } while (0)
 
@@ -47,7 +49,7 @@ extern int uvc_app_log_level;
     if (enable_minilog)                                                        \
       minilog_warn("[%s][%s]:" format, LOG_TAG, __FUNCTION__, ##__VA_ARGS__);  \
     else                                                                       \
-      fprintf(stderr, "[%s][%s]:" format, LOG_TAG, __FUNCTION__,               \
+      fprintf(stderr, "[%s][%s][%s:%d]:" format, LOG_TAG, __FUNCTION__, __FILE__, __LINE__,\
               ##__VA_ARGS__);                                                  \
   } while (0)
 
@@ -58,7 +60,7 @@ extern int uvc_app_log_level;
     if (enable_minilog)                                                        \
       minilog_error("[%s][%s]:" format, LOG_TAG, __FUNCTION__, ##__VA_ARGS__); \
     else                                                                       \
-      fprintf(stderr, "[%s][%s]:" format, LOG_TAG, __FUNCTION__,               \
+      fprintf(stderr, "[%s][%s][%s:%d]:" format, LOG_TAG, __FUNCTION__, __FILE__, __LINE__,\
               ##__VA_ARGS__);                                                  \
   } while (0)
 
@@ -69,7 +71,7 @@ extern int uvc_app_log_level;
     if (enable_minilog)                                                        \
       minilog_debug("[%s][%s]:" format, LOG_TAG, __FUNCTION__, ##__VA_ARGS__); \
     else                                                                       \
-      fprintf(stderr, "[%s][%s]:" format, LOG_TAG, __FUNCTION__,               \
+      fprintf(stderr, "[%s][%s][%s:%d]:" format, LOG_TAG, __FUNCTION__, __FILE__, __LINE__,\
               ##__VA_ARGS__);                                                  \
   } while (0)
 

@@ -45,9 +45,14 @@
 
 //#include "camera_control.h"
 
-#define UVC_STREAMING_INTF_PATH "/sys/kernel/config/usb_gadget/rockchip/functions/uvc.gs6/streaming/bInterfaceNumber"
+//#define UVC_STREAMING_INTF_PATH "/sys/kernel/config/usb_gadget/rockchip/functions/uvc.gs6/streaming/bInterfaceNumber"
+//#define UVC_STREAMING_MAXPACKET_PATH "/sys/kernel/config/usb_gadget/rockchip/functions/uvc.gs6/streaming_maxpacket"
 
-#define UVC_STREAMING_MAXPACKET_PATH "/sys/kernel/config/usb_gadget/rockchip/functions/uvc.gs6/streaming_maxpacket"
+//hexmeet
+#define UVC_STREAMING_INTF_PATH "/config/usb_gadget/g1/functions/uvc.gs6/streaming/bInterfaceNumber"
+#define UVC_STREAMING_MAXPACKET_PATH "/config/usb_gadget/g1/functions/uvc.gs6/streaming_maxpacket"
+
+
 int enable_minilog;
 int uvc_app_log_level;
 int app_quit;
@@ -191,7 +196,7 @@ int check_uvc_video_id(void)
             get_uvc_index_to_name(fc[i]->index, fc[i]->dev_name);
              uvc_ctrl[i].id = fc[i]->video;
              uvc_ctrl[i].fc = fc[i];
-             LOG_DEBUG("uvc_function_config fc->video:%d,fc->streaming.num_formats:%d",fc[i]->video,uvc_ctrl[i].fc->streaming.num_formats);
+             LOG_DEBUG("uvc_function_config fc[i]->index:%d fc->video:%d,fc->streaming.num_formats:%d", fc[i]->index, fc[i]->video,uvc_ctrl[i].fc->streaming.num_formats);
         }
     }
 
@@ -210,7 +215,7 @@ void add_uvc_video()
     if (uvc_ctrl[0].id >= 0)
     {
         uvc_video_id_add(uvc_ctrl[0].fc);
-        LOG_INFO("uvc_ctrl[0].id:%d, uvc_ctrl[0].fc->video:%d\n",uvc_ctrl[0].id,uvc_ctrl[0].fc->video);
+        LOG_DEBUG("uvc_ctrl[0].id:%d, uvc_ctrl[0].fc->video:%d\n",uvc_ctrl[0].id,uvc_ctrl[0].fc->video);
     }
 
     if (uvc_ctrl[1].id >= 0) {
@@ -412,13 +417,16 @@ int uvc_control_run(uint32_t flags)
     uvc_flags = flags;
     if ((flags & UVC_CONTROL_CHECK_STRAIGHT) || (flags & UVC_CONTROL_CAMERA))
     {
+        LOG_DEBUG("uvc_control_run check_uvc_video_id() entering\n");
         if (!check_uvc_video_id())
         {
+            LOG_INFO("uvc_control_run add_uvc_video() entering\n");
             add_uvc_video();
         }
     }
     else
     {
+        LOG_DEBUG("uvc_control_run uevent_monitor_run() entering\n");
         uevent_monitor_run(flags);
         if (pthread_create(&run_id, NULL, uvc_control_thread, &flags))
         {
